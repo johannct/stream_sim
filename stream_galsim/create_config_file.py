@@ -7,9 +7,8 @@ import os
 mws = galstreams.MWStreams(verbose=False, implement_Off=False)
 
 # User specifies the StreamName (filter based on the Name column)
-column_name = 'Name'
-stream_name = "Pal5"
-column_value = stream_name
+column_name = 'TrackName'
+stream_name = "NGC5466-J21"
 
 # Convert to DataFrame
 df = mws.summary
@@ -18,9 +17,16 @@ df = mws.summary
 filtered_df = df[df[column_name] == stream_name]
 
 # Custom Data
+# user_coord = pd.DataFrame({
+#     'parameter': ['cluster','ra', 'dec', 'distance', 'pm_ra_cosdec', 'pm_dec', 'radial_velocity', 'frame'],
+#     'value': [f'{stream_name}',229, -0.124, 22.9, -2.296, -2.257, -58.7, 'icrs'],
+#     'unit': [None, 'deg', 'deg', 'kpc', 'mas/yr', 'mas/yr', 'km/s', None]
+# })
+
+###NGC5466
 user_coord = pd.DataFrame({
     'parameter': ['cluster','ra', 'dec', 'distance', 'pm_ra_cosdec', 'pm_dec', 'radial_velocity', 'frame'],
-    'value': [f'{stream_name}',229, -0.124, 22.9, -2.296, -2.257, -58.7, 'icrs'],
+    'value': [f'{stream_name}',211.36, 28.53, 16.0, -5.41, -0.79, 106.93, 'icrs'],
     'unit': [None, 'deg', 'deg', 'kpc', 'mas/yr', 'mas/yr', 'km/s', None]
 })
 

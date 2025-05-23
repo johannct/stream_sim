@@ -76,7 +76,7 @@ class NonPerturbedStreamModel:
         ts = np.linspace(0., -self.tdisrupt, npts)
         self.orbit.integrate(ts, self.pot)
         r = np.sqrt(self.orbit.x(ts)**2 + self.orbit.y(ts)**2 + self.orbit.z(ts)**2)
-        return np.mean(r), np.max(r)
+        return np.mean(r), np.max(r), np.min(r)
 
     def compute_average_Omega_parallel(self, npts=1000):
         # Sample angles and frequencies
@@ -114,10 +114,10 @@ class DMS_Distribution:
     def __init__(self,
                  profile='einasto',
                  profile_params=None,
-                 r_max=300.0):
+                 gal_rmax=300.0):
         self.profile = profile
-        self.profile_params = profile_params or {'alpha': 0.678, 'r_minus2': 199}
-        self.r_max = r_max
+        self.profile_params = profile_params or {'alpha': 0.678, 'r_minus2': 199, 'rs': 21}
+        self.gal_rmax = gal_rmax
 
     def _to_quantity(self, val, unit):
         """
@@ -144,49 +144,53 @@ class DMS_Distribution:
     def spatial_profile(self, r):
         """
         Spatial number density profile of subhalos.
-        Currently supports only 'einasto'.
+        Currently supports only 'einasto' and 'NFW'.
         """
         if self.profile == 'einasto':
             alpha = self.profile_params['alpha']
             r_minus2 = self.profile_params['r_minus2']
             x = r / r_minus2
             return np.exp(-2 / alpha * (x**alpha - 1))
+        elif self.profile == 'NFW':
+            rs = self.profile_params['rs']
+            x = r / rs
+            return 1.0 / (x * (1 + x)**2)
         else:
-            raise NotImplementedError(f"Profile {self.profile} not implemented. Profiles: ['einasto']")
+            raise NotImplementedError(f"Profile {self.profile} not implemented. Profiles: ['einasto', 'NFW']")
 
-    def integrate_spatial_profile(self, r_min=0.01, r_max=500):
+    def integrate_spatial_profile(self, rmax, r_min=0.01):
         """
-        Fraction of subhalos within [r_min, r_max] based on spatial profile.
+        Fraction of subhalos within [r_min, gal_rmax] based on spatial profile.
         """
-        r_max = r_max or self.r_max
 
         integrand = lambda r: 4 * np.pi * r**2 * self.spatial_profile(r)
 
-        total = quad(integrand, 0.01, self.r_max)[0]
-        partial = quad(integrand, r_min, r_max)[0]
+        total = quad(integrand, 0.01, self.gal_rmax)[0]
+        partial = quad(integrand, r_min, rmax)[0]
 
         return partial / total
 
-    def number_involume_inmassrange(self, R, M_min=1e5, M_max=1e9):
+    def number_involume_inmassrange(self, rmin, rmax, M_min=1e5, M_max=1e9):
         """
         Total number of subhalos within radius R.
         """
-        R = self._to_quantity(R, u.kpc).value
+        rmin = self._to_quantity(rmin, u.kpc).value
+        rmax = self._to_quantity(rmax, u.kpc).value
         M_min = self._to_quantity(M_min, u.Msun).value
         M_max = self._to_quantity(M_max, u.Msun).value
 
         N_mass = self.integrate_mass_function(M_min, M_max)
-        N_radius = self.integrate_spatial_profile(r_max=R)
+        N_radius = self.integrate_spatial_profile(rmax, rmin)
         return N_mass * N_radius
 
-    def density_involume_inmassrange(self, R, M_min=1e5, M_max=1e9):
+    def density_involume_inmassrange(self, rmin, rmax, M_min=1e5, M_max=1e9):
         """
         density (/kpc3) of subhalos within radius R.
         """
-        R = self._to_quantity(R, u.kpc)
-        V = (4/3) * np.pi * R**3
-
-        N = self.number_involume_inmassrange(R, M_min, M_max)
+        rmin = self._to_quantity(rmin, u.kpc)
+        rmax = self._to_quantity(rmax, u.kpc)
+        V = (4/3) * np.pi * rmax**3# - (4/3) * np.pi * rmin *3
+        N = self.number_involume_inmassrange(rmin, rmax, M_min, M_max)
         return (N / V).to(1 / u.kpc**3)
 
     def bmax_inmassrange(self, M_min, M_max, profile='NFW', alpha=5.0):
@@ -227,12 +231,13 @@ class ImpactSampler:
     
     Returns sampled DMS with impact properties {(ti, thetai, mi, bi, wi)}
     '''
-    def __init__(self, N_enc, mass_range, sigma_h, tdisrupt, stream_length):
+    def __init__(self, N_enc, mass_range, sigma_h, tdisrupt, stream_length, profile='einasto'):
         self.stream_length = self._to_quantity(stream_length, u.rad).value
         self.mass_range = self._to_quantity(mass_range, u.Msun).value
         self.sigma_h = self._to_quantity(sigma_h,u.km/u.s).value
         self.tdisrupt = self._to_quantity(tdisrupt, u.Gyr).value
         self.N_enc = np.random.poisson(self._to_quantity(N_enc, u.rad).value)
+        self.profile = profile
         print('Generating', int(self.N_enc), 'impacts between the stream and subhalos')
 
     def _to_quantity(self, val, unit):
@@ -262,7 +267,6 @@ class ImpactSampler:
             u_ = np.random.uniform(0, f_max)
             if u_ < time_function(t):
                 times.append(t)
-
         return np.array(times)
 
     def impact_angle(self, impact_times):
@@ -275,7 +279,7 @@ class ImpactSampler:
         impact_angles = np.random.uniform(low=0.05, high=ti_length)
         return impact_angles
     
-    def subhalo_masses(self, distribution_profile='Einasto', a0=1.56e-5, m0=2.52e7, n=-1.9):
+    def subhalo_masses(self, distribution_profile='Einasto', a0=3.26e-5, m0=2.52e7, n=-1.9):
         '''
         Sample halo masses m in mass range.
          - mass_range: tuple (Mmin, Max)
@@ -311,7 +315,8 @@ class ImpactSampler:
         '''
         masses = self._to_quantity(masses, u.Msun)
         rs = 1.05 * u.kpc * (masses / (1e8 * u.Msun))**0.5
-        return alpha * rs
+        b=np.random.uniform(-alpha * rs, alpha * rs)
+        return b, rs
 
     def flyby_velocity(self):
         '''
@@ -332,8 +337,111 @@ class ImpactSampler:
         t = self.impact_time()
         theta = self.impact_angle(t)
         m = self.subhalo_masses()
-        b = self.impact_parameter(m)
+        b = self.impact_parameter(m)[0]
+        rs = self.impact_parameter(m)[1]
         w = self.flyby_velocity()
-        print('t,theta,m,b, w[0], w[1], w[2]]')
-        return np.array([t,theta,m,b, w[0], w[1], w[2]]).T
+
+        return ImpactList(
+            t=t,
+            theta=theta,
+            m=m,
+            b=b,
+            rs=rs,
+            w_r=w[0],
+            w_phi=w[1],
+            w_z=w[2],
+            mass_range=self.mass_range,
+            t_range=(0,self.tdisrupt),
+            profile = self.profile
+        )
+
+class ImpactList:
+    def __init__(self, t, theta, m, b, rs, w_r, w_phi, w_z, mass_range=(1e5, 1e9), t_range=(0, 5), profile = 'einasto'):
+        self.t = t
+        self.theta = theta
+        self.m = m
+        self.b = b
+        self.rs = rs
+        self.w_r = w_r
+        self.w_phi = w_phi
+        self.w_z = w_z
+        self.mass_range = mass_range
+        self.t_range = t_range
+        self.profile = profile
+
+    def values(self):
+        return np.array([self.t,self.theta,self.m,self.b, self.w_r, self.w_phi, self.w_z]).T
+
+    def plot_distributions(self, bins=20):
+        import matplotlib.pyplot as plt
+        import numpy as np
+        import astropy.units as u
+
+        fig, axs = plt.subplots(2, 3, figsize=(18, 10))
+        axs = axs.ravel()
+
+        # 1. Impact times
+        axs[0].hist(self.t, bins=bins, color='steelblue', edgecolor='black')
+        axs[0].set_title("Impact times")
+        axs[0].set_xlabel("Time [Gyr]")
+        axs[0].set_ylabel("Counts")
+
+        # 2. Impact angles
+        axs[1].hist(self.theta, bins=bins, color='darkorange', edgecolor='black')
+        axs[1].set_title("Impact angles")
+        axs[1].set_xlabel("Angle [rad]")
+        axs[1].set_ylabel("Counts")
+
+        # 3. Subhalo masses (log bins)
+        logbins = np.logspace(np.log10(self.mass_range[0]),
+                            np.log10(self.mass_range[1]), int(np.log10(self.mass_range[1])-np.log10(self.mass_range[0])+1))
+        axs[2].hist(self.m, bins=logbins, color='seagreen', edgecolor='black')
+        axs[2].set_xscale('log')
+        axs[2].set_title("Subhalo masses")
+        axs[2].set_xlabel("Mass [M$_\odot$]")
+        axs[2].set_ylabel("Counts")
+
+        # 4. Impact parameters
+        axs[3].hist(self.b, bins=bins, color='purple', edgecolor='black')
+        axs[3].set_title("Impact parameters")
+        axs[3].set_xlabel("b [kpc]")
+        axs[3].set_ylabel("Counts")
+
+        # 5. Velocity components
+        axs[4].hist(self.w_r, bins=bins, alpha=0.5, label='w_r', color='red')
+        axs[4].hist(self.w_phi, bins=bins, alpha=0.5, label='w_phi', color='blue')
+        axs[4].hist(self.w_z, bins=bins, alpha=0.5, label='w_z', color='green')
+        axs[4].set_title("Velocity components")
+        axs[4].set_xlabel("Velocity [km/s]")
+        axs[4].set_ylabel("Counts")
+        axs[4].legend()
+
+        # 6. Subhalo profile: Einasto + NFW
+        r = np.logspace(-2, 2.5, 500)  # kpc
+
+        rs = np.mean(self.rs).value
+        if self.profile == 'einasto':
+            # Einasto
+            alpha_e = 0.05
+
+            r_minus2 = rs
+            x_e = r/r_minus2
+            x_n = r/rs
+            rho = np.exp(-2 / alpha_e * (x_e ** alpha_e - 1))
+        elif self.profile == 'NFW':
+            rho = 1 / (x_n * (1 + x_n)**2)
+
+        axs[5].loglog(r, rho, label=f"{self.profile}", color='black')
+
+        # Vertical dashed line for rs
+        axs[5].axvline(rs, color='gray', linestyle=':', label=f'$r_s$ = {rs:.2f} kpc')
+
+        axs[5].set_title(f"Subhalo density profile")
+        axs[5].set_xlabel("r [kpc]")
+        axs[5].set_ylabel("ρ(r)/<ρ>")
+        axs[5].legend()
+
+        plt.tight_layout()
+        plt.show()
+
 
