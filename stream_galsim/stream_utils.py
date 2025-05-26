@@ -230,40 +230,62 @@ def icrs_to_phi12(stream_stars, pole1, pole2, velocities = False):
         # stream_phi12 = stream_phi12.phi1, stream_phi12.phi2, stream_phi12.distance
     return stream_phi12 #Phi1, Phi2, dist
 
+from astropy.table import Table
+import pandas as pd
+import os
 
-def save_star_data(star_list, mag_g, mag_r, coord_system, filepath):
-    """Save RA, Dec, Distance, mag_g, mag_r to a CSV file in 'data/' directory."""
+def save_star_data(star_list, mag_g, mag_r, coord_system, filepath=None, panda=True):
+    """Save or return star data as Astropy Table or pandas DataFrame.
     
-    # Create Astropy table
+    If panda=True, return a pandas DataFrame and also write it as a CSV in 'data/' directory.
+    If panda=False, save as Astropy table to CSV.
+    """
+    
+    # Assemble data dictionary
     if coord_system == 'radec':
-        table = Table(
-            data=[
-                star_list.ra.deg,         # RA in degrees
-                star_list.dec.deg,        # Dec in degrees
-                star_list.distance.kpc,   # Distance in kpc
-                mag_g,                    # g-band magnitude
-                mag_r                     # r-band magnitude
-            ],
-            names=["ra", "dec", "dist", "mag_g", "mag_r"]
-        )
+        data = {
+            "ra": star_list.ra.deg,
+            "dec": star_list.dec.deg,
+            "dist": star_list.distance.kpc,
+            "muRA": star_list.pm_ra_cosdec.value,
+            "muDec": star_list.pm_dec.value,
+            "rv": star_list.radial_velocity.value,
+            "mag_g": mag_g,
+            "mag_r": mag_r
+        }
     elif coord_system == 'phi12':
-        table = Table(
-            data=[
-                star_list.Phi1.deg,       # Phi1 in degrees
-                star_list.Phi2.deg,       # Phi2 in degrees
-                star_list.distance.kpc,   # Distance in kpc
-                mag_g,                    # g-band magnitude
-                mag_r                     # r-band magnitude
-            ],
-            names=["phi1", "phi2", "dist", "mag_g", "mag_r"]
-        )
+        data = {
+            "phi1": star_list.phi1.deg,
+            "phi2": star_list.phi2.deg,
+            "dist": star_list.distance.kpc,
+            "mu1": star_list.pm_phi1_cosphi2.value,
+            "mu2": star_list.pm_phi2.value,
+            "rv": star_list.radial_velocity.value,
+            "mag_g": mag_g,
+            "mag_r": mag_r
+        }
     else:
         raise NotImplementedError('use phi12 or radec')
 
-    # Save to CSV
-    table.write(filepath, format="csv", overwrite=True)
-    print(f"Saved: {filepath}")
+    if panda:
+        df = pd.DataFrame(data)
 
+        # Crée un nom de fichier par défaut si nécessaire
+        if filepath is None:
+            os.makedirs("data", exist_ok=True)
+            filepath = os.path.join("data", "star_data.csv")
+        
+        df.to_csv(filepath, index=False)
+        print(f"Pandas DataFrame saved to: {filepath}")
+        return df
+    else:
+        table = Table(data)
+
+        if filepath is None:
+            raise ValueError("filepath must be specified when panda=False.")
+        
+        table.write(filepath, format="csv", overwrite=True)
+        print(f"Astropy Table saved to: {filepath}")
 
 
 class IsochroneModel:
