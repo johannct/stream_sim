@@ -7,11 +7,13 @@ import numpy as np
 from scipy.integrate import quad
 import astropy.units as u
 from astropy.units import Quantity
+from astropy.constants import G
 import galpy.potential as gp
 import galpy.actionAngle as ga
 from galpy.orbit import Orbit
 from galpy.df import streamdf
 import stream_galsim.stream_utils as sutils
+import pandas as pd
 
 
 def expected_N_encounters(r_avg, sigma_h, t_d, delta_omega, b_max, n_h):
@@ -94,7 +96,7 @@ class NonPerturbedStreamModel:
         Omega_parallel = np.dot(Omega_mean, diff_dir)
         return abs(Omega_parallel)
     
-    def estimate_Omega_parallel(self, npts=1000):
+    def estimate_Omega_parallel(self):
         # estimate stream growth frequency, considering a linear growth over time
         return self.stream_length()/self.tdisrupt
 
@@ -143,7 +145,7 @@ class DMS_Distribution:
 
     def spatial_profile(self, r):
         """
-        Spatial number density profile of subhalos.
+        Spatial number density profile of the milky way halo.
         Currently supports only 'einasto' and 'NFW'.
         """
         if self.profile == 'einasto':
@@ -189,24 +191,27 @@ class DMS_Distribution:
         """
         rmin = self._to_quantity(rmin, u.kpc)
         rmax = self._to_quantity(rmax, u.kpc)
-        V = (4/3) * np.pi * rmax**3# - (4/3) * np.pi * rmin *3
+        V = (4/3) * np.pi * rmax**3 - (4/3) * np.pi * rmin**3
         N = self.number_involume_inmassrange(rmin, rmax, M_min, M_max)
         return (N / V).to(1 / u.kpc**3)
 
-    def bmax_inmassrange(self, M_min, M_max, profile='NFW', alpha=5.0):
+    def bmax_inmassrange(self, M_min, M_max, profile='Plummer', alpha=5.0, n=1.9):
         """
         Typical bmax in the considered mass range. Depends of the subhalo profile and an adjustable parameter
         """
         M_min = self._to_quantity(M_min, u.Msun).value
         M_max = self._to_quantity(M_max, u.Msun).value
-        M_avg = 10**np.mean([np.log10(M_min), np.log10(M_max)])
+        num = (M_max**(2 - n) - M_min**(2 - n)) / (2 - n)
+        den = (M_max**(1 - n) - M_min**(1 - n)) / (1 - n)
+        M_avg = num / den #mass function weighted mean mass
 
         if profile == 'NFW':
-            c = 15 * (M_avg / 1e8)**-0.1 #concentration profile
-            r_vir = 1.0 * (M_avg / 1e8)**(1/3)  # virial radius
-            rs = r_vir / c
+            # c = 15 * (M_avg / 1e8)**-0.1 #concentration profile
+            # r_vir = 1.0 * (M_avg / 1e8)**(1/3)  # virial radius
+            # rs = r_vir / c
+            rs = (M_avg / 1e9)**0.4 * 1
         elif profile == 'Plummer':
-            rs = (M_avg / 1e8)**0.5 * 1.0
+            rs = (M_avg / 1e8)**0.5 * 1.05
         else:
             raise ValueError("Unrecognized profile. choose NFW or Plummer")
 
@@ -231,7 +236,7 @@ class ImpactSampler:
     
     Returns sampled DMS with impact properties {(ti, thetai, mi, bi, wi)}
     '''
-    def __init__(self, N_enc, mass_range, sigma_h, tdisrupt, stream_length, profile='einasto'):
+    def __init__(self, N_enc, mass_range, sigma_h, tdisrupt, stream_length, profile='NFW'):
         self.stream_length = self._to_quantity(stream_length, u.rad).value
         self.mass_range = self._to_quantity(mass_range, u.Msun).value
         self.sigma_h = self._to_quantity(sigma_h,u.km/u.s).value
@@ -279,17 +284,13 @@ class ImpactSampler:
         impact_angles = np.random.uniform(low=0.05, high=ti_length)
         return impact_angles
     
-    def subhalo_masses(self, distribution_profile='Einasto', a0=3.26e-5, m0=2.52e7, n=-1.9):
+    def subhalo_masses(self, a0=3.26e-5, m0=2.52e7, n=-1.9):
         '''
-        Sample halo masses m in mass range.
+        Sample halo masses m in mass range, following a power function as a probability distribution function.
          - mass_range: tuple (Mmin, Max)
-         - distribution_profile: string (profile)
          - a0,m0,n = floats (distribution parameters)
         '''
-        if distribution_profile == 'Einasto':
-            mass_function = lambda M: a0 * (M / m0)**n
-        else:
-            raise NotImplementedError(f"Profile {distribution_profile} not implemented.")
+        mass_function = lambda M: a0 * (M / m0)**n
 
         M_min, M_max = self.mass_range
         masses = []
@@ -312,11 +313,37 @@ class ImpactSampler:
         Parameters:
          - mass: of the considered subhalo, float or list, in Msun
          - alpha: factor of the b range to consider b ∈ [-Xrs,Xrs]
+        Outputs:
+         - impact parameter
+         - scale radius, approximated from an empirical relation
         '''
         masses = self._to_quantity(masses, u.Msun)
         rs = 1.05 * u.kpc * (masses / (1e8 * u.Msun))**0.5
         b=np.random.uniform(-alpha * rs, alpha * rs)
         return b, rs
+
+    def subhalo_potential(self, masses, rss, alpha = 0.16):
+        '''
+        Compute galpy.potential instance for the subhalo.
+        Parameters:
+         - m, masses of the subhalos (list of Quantity)
+         - rs, scale radius (list of Quantity)
+        Output:
+         - potential instance: [NFW]
+        '''
+        masses = self._to_quantity(masses, u.Msun)
+        rss = self._to_quantity(rss, u.kpc)
+
+        subhalopots = []
+        for (m, rs) in zip(masses, rss):
+            if self.profile == 'einasto':
+                rho = lambda r: np.exp(-2 / alpha * ((r/rs)**alpha - 1))
+                subhalopot = gp.AnySphericalPotential(amp=(m/(4*np.pi*rs**3)).value, dens = rho)
+            elif self.profile == 'NFW':
+                subhalopot = gp.NFWPotential(amp = m*G, a=rs)
+            subhalopots.append(subhalopot)
+        return subhalopots
+
 
     def flyby_velocity(self):
         '''
@@ -340,6 +367,7 @@ class ImpactSampler:
         b = self.impact_parameter(m)[0]
         rs = self.impact_parameter(m)[1]
         w = self.flyby_velocity()
+        shpot= self.subhalo_potential(m, rs)
 
         return ImpactList(
             t=t,
@@ -352,11 +380,12 @@ class ImpactSampler:
             w_z=w[2],
             mass_range=self.mass_range,
             t_range=(0,self.tdisrupt),
+            shpot = shpot,
             profile = self.profile
         )
 
 class ImpactList:
-    def __init__(self, t, theta, m, b, rs, w_r, w_phi, w_z, mass_range=(1e5, 1e9), t_range=(0, 5), profile = 'einasto'):
+    def __init__(self, t, theta, m, b, rs, w_r, w_phi, w_z, shpot, profile, mass_range=(1e5, 1e9), t_range=(0, 5)):
         self.t = t
         self.theta = theta
         self.m = m
@@ -365,12 +394,15 @@ class ImpactList:
         self.w_r = w_r
         self.w_phi = w_phi
         self.w_z = w_z
+        self.shpot = shpot
+        self.profile = profile        
         self.mass_range = mass_range
         self.t_range = t_range
-        self.profile = profile
+        
 
     def values(self):
-        return np.array([self.t,self.theta,self.m,self.b, self.w_r, self.w_phi, self.w_z]).T
+        print('t, theta, m, b, w_r,w_phi,w_z, shpot')
+        return np.array([self.t,self.theta,self.m,self.b, self.w_r, self.w_phi, self.w_z, self.shpot]).T
 
     def plot_distributions(self, bins=20):
         import matplotlib.pyplot as plt
@@ -426,9 +458,9 @@ class ImpactList:
 
             r_minus2 = rs
             x_e = r/r_minus2
-            x_n = r/rs
             rho = np.exp(-2 / alpha_e * (x_e ** alpha_e - 1))
         elif self.profile == 'NFW':
+            x_n = r/rs
             rho = 1 / (x_n * (1 + x_n)**2)
 
         axs[5].loglog(r, rho, label=f"{self.profile}", color='black')
