@@ -6,7 +6,6 @@ to use with galpy.peppered.
 import numpy as np
 from scipy.integrate import quad
 import astropy.units as u
-from astropy.units import Quantity
 from astropy.constants import G
 import galpy.potential as gp
 import galpy.actionAngle as ga
@@ -14,9 +13,10 @@ from galpy.orbit import Orbit
 from galpy.df import streamdf
 import stream_galsim.stream_utils as sutils
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
-def expected_N_encounters(r_avg, sigma_h, t_d, delta_omega, b_max, n_h):
+def expected_N_encounters(sigma_h, t_d,  b_max, n_h, r_avg=10.0, delta_omega=1.0, phys_length=10.0, use_phys_length = False):
     '''
     From unperturbed stream data and DMS properties, compute the expected number of encounters between sts and DMS
     Parameters:
@@ -29,21 +29,27 @@ def expected_N_encounters(r_avg, sigma_h, t_d, delta_omega, b_max, n_h):
     '''
     #convert to correct quantity
     def _to_quantity(val, unit):
-        if isinstance(val, Quantity):
+        if isinstance(val, u.Quantity):
             return val.to(unit)
         else:
             return val * unit
 
-    r_avg = _to_quantity(r_avg, u.kpc)
     sigma_h = _to_quantity(sigma_h, u.km/u.s).to(u.kpc/u.Gyr)
     t_d = _to_quantity(t_d, u.Gyr)
-    delta_omega =_to_quantity(delta_omega, u.rad/u.Gyr)
     b_max = _to_quantity(b_max, u.kpc)
     n_h = _to_quantity(n_h, 1/u.kpc**(3))
     
-    N_enc = (np.sqrt(np.pi) / 2) * r_avg * sigma_h * t_d**2 \
-            * delta_omega * b_max * n_h
-    
+    if use_phys_length == True:
+        phys_length = _to_quantity(phys_length, u.kpc)
+        N_enc = (np.sqrt(np.pi) / 2) * sigma_h * t_d * b_max * n_h * phys_length
+
+    else:
+        delta_omega =_to_quantity(delta_omega, u.rad/u.Gyr)
+        r_avg = _to_quantity(r_avg, u.kpc)
+        N_enc = (np.sqrt(np.pi) / 2) * r_avg * sigma_h * t_d**2 \
+                * delta_omega * b_max * n_h
+
+
     return N_enc
 
 
@@ -67,8 +73,8 @@ class NonPerturbedStreamModel:
             nTrackChunks=26,
             )
     
-    def stream_length(self):
-        return self.stream.length()
+    def stream_length(self, threshold=0.2, phys=False):
+        return self.stream.length(threshold=threshold, phys=phys)
     
     def streamdf(self):
         return self.stream
@@ -119,14 +125,19 @@ class DMS_Distribution:
                  gal_rmax=300.0):
         self.profile = profile
         self.profile_params = profile_params or {'alpha': 0.678, 'r_minus2': 199, 'rs': 21}
+        alpha = self.profile_params['alpha']
+        r_minus2 = self.profile_params['r_minus2']
+        rs = self.profile_params['rs']
         self.gal_rmax = gal_rmax
+        print('Galactic parameters:', '\n', f'alpha = {alpha} | r_minus2 = {r_minus2} | rs = {rs}',
+                '\n', f'galactic radius = {self.gal_rmax}, galactic profile = {self.profile}')
 
     def _to_quantity(self, val, unit):
         """
         Convert float or int to Quantity with assumed unit,
         or return the Quantity with correct unit.
         """
-        if isinstance(val, Quantity):
+        if isinstance(val, u.Quantity):
             return val.to(unit)
         else:
             return val * unit
@@ -195,7 +206,7 @@ class DMS_Distribution:
         N = self.number_involume_inmassrange(rmin, rmax, M_min, M_max)
         return (N / V).to(1 / u.kpc**3)
 
-    def bmax_inmassrange(self, M_min, M_max, profile='Plummer', alpha=5.0, n=1.9):
+    def bmax_inmassrange(self, M_min, M_max, profile='NFW', alpha=5.0, n=1.9):
         """
         Typical bmax in the considered mass range. Depends of the subhalo profile and an adjustable parameter
         """
@@ -205,13 +216,13 @@ class DMS_Distribution:
         den = (M_max**(1 - n) - M_min**(1 - n)) / (1 - n)
         M_avg = num / den #mass function weighted mean mass
 
-        if profile == 'NFW':
+        print('subhalo profile:', profile)
+        if profile == 'NFW' or 'einasto':
             # c = 15 * (M_avg / 1e8)**-0.1 #concentration profile
             # r_vir = 1.0 * (M_avg / 1e8)**(1/3)  # virial radius
             # rs = r_vir / c
-            rs = (M_avg / 1e9)**0.4 * 1
-        elif profile == 'Plummer':
-            rs = (M_avg / 1e8)**0.5 * 1.05
+            # rs = (M_avg / 1e9)**0.4 * 1
+            rs = (M_avg / 1e8)**0.39 * 1.24
         else:
             raise ValueError("Unrecognized profile. choose NFW or Plummer")
 
@@ -236,8 +247,11 @@ class ImpactSampler:
     
     Returns sampled DMS with impact properties {(ti, thetai, mi, bi, wi)}
     '''
-    def __init__(self, N_enc, mass_range, sigma_h, tdisrupt, stream_length, profile='NFW'):
-        self.stream_length = self._to_quantity(stream_length, u.rad).value
+    def __init__(self, N_enc, mass_range, sigma_h, tdisrupt, stream_length, use_phys_length=False, profile='NFW'):
+        if use_phys_length:
+            self.stream_length = self._to_quantity(stream_length, u.kpc).value
+        else:       
+            self.stream_length = self._to_quantity(stream_length, u.rad).value
         self.mass_range = self._to_quantity(mass_range, u.Msun).value
         self.sigma_h = self._to_quantity(sigma_h,u.km/u.s).value
         self.tdisrupt = self._to_quantity(tdisrupt, u.Gyr).value
@@ -250,7 +264,7 @@ class ImpactSampler:
         Convert float or int to Quantity with assumed unit,
         or return the Quantity with correct unit.
         """
-        if isinstance(val, Quantity):
+        if isinstance(val, u.Quantity):
             return val.to(unit)
         else:
             return val * unit
@@ -318,7 +332,7 @@ class ImpactSampler:
          - scale radius, approximated from an empirical relation
         '''
         masses = self._to_quantity(masses, u.Msun)
-        rs = 1.05 * u.kpc * (masses / (1e8 * u.Msun))**0.5
+        rs = 1.24 * u.kpc * (masses / (1e8 * u.Msun))**0.39
         b=np.random.uniform(-alpha * rs, alpha * rs)
         return b, rs
 
@@ -405,10 +419,6 @@ class ImpactList:
         return np.array([self.t,self.theta,self.m,self.b, self.w_r, self.w_phi, self.w_z, self.shpot]).T
 
     def plot_distributions(self, bins=20):
-        import matplotlib.pyplot as plt
-        import numpy as np
-        import astropy.units as u
-
         fig, axs = plt.subplots(2, 3, figsize=(18, 10))
         axs = axs.ravel()
 
@@ -477,3 +487,81 @@ class ImpactList:
         plt.show()
 
 
+from scipy.signal.windows import hann
+from scipy.fft import fft, fftfreq #scipy.stats.csd
+
+class PowerSpectrum1D:
+    def __init__(self, delta, xi):
+        """
+        Initializes with a regularly sampled density contrast.
+
+        delta: array-like
+        Array of density contrasts.
+        xi: array-like
+        Corresponding angular positions (degrees or radians).
+        """
+        self.delta = np.asarray(delta)
+        self.xi = np.asarray(xi)
+        self.d_xi = self.xi[1] - self.xi[0]
+        self.N = len(self.delta)
+
+        self.mods = None
+        self.power = None
+        self.noise = None
+
+    def compute(self, window=True):
+        """Calculates the signal power spectrum."""
+        signal = self.delta * hann(self.N) if window else self.delta
+        fft_vals = fft(signal)
+        power = np.abs(fft_vals)**2# / self.N**2
+        mods = fftfreq(self.N, d=self.d_xi)
+
+        mask = mods > 0
+        self.mods = mods[mask]
+        self.power = power[mask]
+
+    def noise_compute(self, n_iter=100):
+        """Computes the average power spectrum of background noise"""
+        sigma = np.std(self.delta)
+        noise_power = []
+
+        for _ in range(n_iter):
+            noise = np.random.normal(0, sigma, self.N)
+            fft_vals = fft(noise * hann(self.N))
+            power = np.abs(fft_vals)**2 #/ self.N**2
+            noise_power.append(power)
+
+        noise_power = np.array(noise_power)
+        mods = fftfreq(self.N, d=self.d_xi)
+        mask = mods > 0
+        self.noise = np.mean(noise_power[:, mask], axis=0)
+
+    def plot(self, loglog=True, noise=True, xscale='mode'):
+        """The spectrum has not yet been calculated. Call .compute()"""
+        if self.mods is None or self.power is None:
+            raise RuntimeError()
+
+        plt.figure(figsize=(6, 4))
+
+        if xscale == 'mode':
+            x = self.mods
+            xlabel = r"$k_{\phi}$ (1/deg)"
+        elif xscale == 'size':
+            x = 1 / self.mods
+            xlabel = r"$1/k_{\phi}$ (deg)"
+
+        if loglog:
+            plt.loglog(x, self.power, label="Signal", c='k')
+            if noise and self.noise is not None:
+                plt.loglog(x, self.noise, '--', label="noise")
+        else:
+            plt.plot(x, self.power, label="Signal", c='k')
+            if noise and self.noise is not None:
+                plt.plot(x, self.noise, '--', label="noise")
+
+        plt.ylabel(r"$\sqrt{\delta\delta}$")
+        # plt.title("density contrast power spectrum")
+        plt.legend()
+        # plt.grid(True, which='both')
+        plt.tight_layout()
+        plt.show()

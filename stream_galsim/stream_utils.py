@@ -736,8 +736,8 @@ class StreamDensityFiltering:
         )
         plt.xlabel("ra (deg)")
         plt.ylabel("dec (deg)")
-        plt.title("Densité spatiale" + (" (filtrée)" if filtered else ""))
-        plt.colorbar(label="Nombre d’étoiles")
+        # plt.title("Surfacic density" + (" (filtered)" if filtered else ""))
+        plt.colorbar(label="Stars per bins")
         plt.show()
 
     def values(self, return_hist=False):
