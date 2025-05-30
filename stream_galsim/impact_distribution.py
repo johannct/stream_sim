@@ -418,44 +418,44 @@ class ImpactList:
         print('t, theta, m, b, w_r,w_phi,w_z, shpot')
         return np.array([self.t,self.theta,self.m,self.b, self.w_r, self.w_phi, self.w_z, self.shpot]).T
 
-    def plot_distributions(self, bins=20):
+    def plot_distributions(self, bins=20, fontsize=12):
         fig, axs = plt.subplots(2, 3, figsize=(18, 10))
         axs = axs.ravel()
 
         # 1. Impact times
         axs[0].hist(self.t, bins=bins, color='steelblue', edgecolor='black')
-        axs[0].set_title("Impact times")
-        axs[0].set_xlabel("Time [Gyr]")
-        axs[0].set_ylabel("Counts")
+        axs[0].set_title("Impact times",fontsize=fontsize)
+        axs[0].set_xlabel("Time [Gyr]",fontsize=fontsize)
+        axs[0].set_ylabel("Counts",fontsize=fontsize)
 
         # 2. Impact angles
         axs[1].hist(self.theta, bins=bins, color='darkorange', edgecolor='black')
-        axs[1].set_title("Impact angles")
-        axs[1].set_xlabel("Angle [rad]")
-        axs[1].set_ylabel("Counts")
+        axs[1].set_title("Impact angles",fontsize=fontsize)
+        axs[1].set_xlabel("Angle [rad]",fontsize=fontsize)
+        # axs[1].set_ylabel("Counts",fontsize=fontsize)
 
         # 3. Subhalo masses (log bins)
         logbins = np.logspace(np.log10(self.mass_range[0]),
                             np.log10(self.mass_range[1]), int(np.log10(self.mass_range[1])-np.log10(self.mass_range[0])+1))
         axs[2].hist(self.m, bins=logbins, color='seagreen', edgecolor='black')
         axs[2].set_xscale('log')
-        axs[2].set_title("Subhalo masses")
-        axs[2].set_xlabel("Mass [M$_\odot$]")
-        axs[2].set_ylabel("Counts")
+        axs[2].set_title("Subhalo masses",fontsize=fontsize)
+        axs[2].set_xlabel("Mass [M$_\odot$]",fontsize=fontsize)
+        # axs[2].set_ylabel("Counts",fontsize=fontsize)
 
         # 4. Impact parameters
         axs[3].hist(self.b, bins=bins, color='purple', edgecolor='black')
-        axs[3].set_title("Impact parameters")
-        axs[3].set_xlabel("b [kpc]")
-        axs[3].set_ylabel("Counts")
+        axs[3].set_title("Impact parameters",fontsize=fontsize)
+        axs[3].set_xlabel("b [kpc]",fontsize=fontsize)
+        axs[3].set_ylabel("Counts",fontsize=fontsize)
 
         # 5. Velocity components
         axs[4].hist(self.w_r, bins=bins, alpha=0.5, label='w_r', color='red')
         axs[4].hist(self.w_phi, bins=bins, alpha=0.5, label='w_phi', color='blue')
         axs[4].hist(self.w_z, bins=bins, alpha=0.5, label='w_z', color='green')
-        axs[4].set_title("Velocity components")
-        axs[4].set_xlabel("Velocity [km/s]")
-        axs[4].set_ylabel("Counts")
+        axs[4].set_title("Velocity components",fontsize=fontsize)
+        axs[4].set_xlabel("Velocity [km/s]",fontsize=fontsize)
+        # axs[4].set_ylabel("Counts",fontsize=fontsize)
         axs[4].legend()
 
         # 6. Subhalo profile: Einasto + NFW
@@ -478,9 +478,9 @@ class ImpactList:
         # Vertical dashed line for rs
         axs[5].axvline(rs, color='gray', linestyle=':', label=f'$r_s$ = {rs:.2f} kpc')
 
-        axs[5].set_title(f"Subhalo density profile")
-        axs[5].set_xlabel("r [kpc]")
-        axs[5].set_ylabel("ρ(r)/<ρ>")
+        axs[5].set_title(f"Subhalo density profile",fontsize=fontsize)
+        axs[5].set_xlabel("r [kpc]",fontsize=fontsize)
+        axs[5].set_ylabel("ρ(r)/<ρ>",fontsize=fontsize)
         axs[5].legend()
 
         plt.tight_layout()
@@ -515,7 +515,6 @@ class PowerSpectrum1D:
         fft_vals = fft(signal)
         power = np.abs(fft_vals)**2# / self.N**2
         mods = fftfreq(self.N, d=self.d_xi)
-
         mask = mods > 0
         self.mods = mods[mask]
         self.power = power[mask]
@@ -536,12 +535,17 @@ class PowerSpectrum1D:
         mask = mods > 0
         self.noise = np.mean(noise_power[:, mask], axis=0)
 
-    def plot(self, loglog=True, noise=True, xscale='mode'):
+    def plot(self, loglog=True, plot_noise=True, xscale='mode', sqrt=False):
         """The spectrum has not yet been calculated. Call .compute()"""
         if self.mods is None or self.power is None:
             raise RuntimeError()
 
         plt.figure(figsize=(6, 4))
+
+        if sqrt ==True:
+            power = np.sqrt(self.power)
+        else:
+            power = self.power
 
         if xscale == 'mode':
             x = self.mods
@@ -549,19 +553,34 @@ class PowerSpectrum1D:
         elif xscale == 'size':
             x = 1 / self.mods
             xlabel = r"$1/k_{\phi}$ (deg)"
+        else:
+            raise NotImplementedError(f'{scale} not implemented. Choose size or mode.')
 
         if loglog:
-            plt.loglog(x, self.power, label="Signal", c='k')
-            if noise and self.noise is not None:
-                plt.loglog(x, self.noise, '--', label="noise")
+            plt.loglog(x, power, label="Signal", c='k')
+            if plot_noise and self.noise is not None:
+                if sqrt ==True:
+                    noise = np.sqrt(self.noise)
+                else:
+                    noise = self.noise
+                plt.loglog(x, noise, '--', label="noise")
         else:
-            plt.plot(x, self.power, label="Signal", c='k')
-            if noise and self.noise is not None:
-                plt.plot(x, self.noise, '--', label="noise")
+            plt.plot(x, power, label="Signal", c='k')
+            if plot_noise and self.noise is not None:
+                if sqrt ==True:
+                    noise = np.sqrt(self.noise)
+                else:
+                    noise = self.noise
+                plt.plot(x, noise, '--', label="noise")
 
-        plt.ylabel(r"$\sqrt{\delta\delta}$")
+        if sqrt ==True:
+            plt.ylabel(r"$\sqrt{\delta\delta}$")
+        else:
+            plt.ylabel(r"$\delta\delta$")
+        
+        plt.xlabel(xlabel)
         # plt.title("density contrast power spectrum")
-        plt.legend()
+        # plt.legend()
         # plt.grid(True, which='both')
         plt.tight_layout()
         plt.show()

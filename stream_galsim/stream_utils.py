@@ -624,16 +624,16 @@ class StreamDensityAnalyzer:
         if plot:
             plt.figure(figsize=(8, 4))
             plt.plot(bin_centers, densities, drawstyle='steps-mid')
-            plt.xlabel("Phi1 (deg)")
+            # plt.xlabel("Phi1 (deg)")
             plt.ylabel("Normalized density (stars / deg)" if normalize else "Density (stars / deg)")
-            plt.title("Stellar stream density profile")
+            # plt.title("Stellar stream density profile")
             plt.grid(True)
             plt.tight_layout()
             plt.show()
 
         return bin_centers, densities
 
-    def fit_polynomial(self, degree=3, plot=False):
+    def fit_polynomial(self, degree=3, plot=False, fontsize=12):
         """
         Fit a polynomial to the density profile.
 
@@ -656,11 +656,11 @@ class StreamDensityAnalyzer:
             plt.plot(self.bin_centers, self.densities, label="Density", drawstyle='steps-mid')
             plt.plot(self.bin_centers, poly_func(self.bin_centers),
                      label=f"Polynomial degree {degree}", color='red')
-            plt.xlabel(r'$\phi_1$ (°)')
-            plt.ylabel("Normalized density")
-            plt.title("Polynomial fit of stellar density")
+            # plt.xlabel(r'$\phi_1$ (°)', fontsize=fontsize)
+            plt.ylabel(r"$\rho/<\rho> (\phi_1$)", fontsize=fontsize)
+            # plt.title("Polynomial fit of stellar density")
             plt.grid(True)
-            plt.legend()
+            # plt.legend()
             plt.tight_layout()
             plt.show()
 
@@ -734,10 +734,11 @@ class StreamDensityFiltering:
             aspect='auto',
             cmap=cmap
         )
-        plt.xlabel("ra (deg)")
-        plt.ylabel("dec (deg)")
+        plt.xlabel("ra (°)", fontsize=14)
+        plt.ylabel("dec (°)", fontsize=14)
         # plt.title("Surfacic density" + (" (filtered)" if filtered else ""))
-        plt.colorbar(label="Stars per bins")
+        # plt.colorbar(label="Stars per bins")
+        plt.tight_layout()
         plt.show()
 
     def values(self, return_hist=False):
