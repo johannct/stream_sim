@@ -107,6 +107,7 @@ s_lead_stars, s_trail_stars, s_full_stars, ps_stars, ps_full_stars = sutils.full
                                                                 ro=acc_host.at[0, 'R0'], vo=acc_host.at[0, 'V0'], 
                                                                 perturbed = perturbed, rdseed = merged_config['rdseed'])
 ##### Conversion #####
+coord = merged_config['output_coord']
 print(f"Convert to {coord} frame...")
 
 if perturbed == 'not':
