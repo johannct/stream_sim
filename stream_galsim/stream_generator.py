@@ -132,6 +132,7 @@ else:
 
 
 ##### Generate ouput file #####
+output_method = merged_config['output_method']
 if output_method == 'stars':
     iso_config = {
     "name": merged_config['iso_name'],
@@ -147,13 +148,13 @@ if output_method == 'stars':
     mag_g_s, mag_r_s = isochrone_model.sample_magnitudes(stream_stars)
 
     # Save stars table with sampled magnitudes
-    sutils.save_star_data(stream_stars, mag_g_s, mag_r_s, 'phi12', filepath=f"{base_dir}/data/{name_o}_stars.csv")
+    sutils.save_star_data(stream_stars, mag_g_s, mag_r_s, 'phi12', filepath=f"{base_dir}/data/{merged_config['name_o']}_stars.csv")
 
 ### To improve
-elif output_method == 'density':
-    print("Generating density map parameters...")
-    stream_track_density = sutils.StreamInterpolateTrackDensity(s_stars_phi12[mask])
-    density_table = stream_track_density.compute_density(delta_phi1=0.05, phi2_bins=15, plot=True, max_fev=1000000)
-    density_table.write(f'{base_dir}/data/hall_2024_{name_o}_input.csv', format='csv', overwrite=True)
-    print(f"density map parameters saved at {base_dir}/data/hall_2024_{name_o}_input.csv")
+# elif output_method == 'density':
+#     print("Generating density map parameters...")
+#     stream_track_density = sutils.StreamInterpolateTrackDensity(s_stars_phi12[mask])
+#     density_table = stream_track_density.compute_density(delta_phi1=0.05, phi2_bins=15, plot=True, max_fev=1000000)
+#     density_table.write(f'{base_dir}/data/hall_2024_{name_o}_input.csv', format='csv', overwrite=True)
+#     print(f"density map parameters saved at {base_dir}/data/hall_2024_{name_o}_input.csv")
 
