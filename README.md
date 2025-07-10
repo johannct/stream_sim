@@ -60,7 +60,7 @@ Once the stream is sampled, `stream_search` can either:
 
 ### Scripts
 
-- **stream_generator**: Main script to generate a stellar stream using a keyword file (`stream_gen_keywords.txt`). Outputs either a density map configuration or star data with magnitudes (in `.csv` format).
+- **stream_generator**: Main script to generate a stellar stream using a keyword file (`stream_gen_keywords.txt`). Outputs either a density map configuration or star data with magnitudes (in `.csv` format). To use: python /Path/To/stream_generator.py --config /Path/To/stream_gen_keywords.txt  --keywords value
 - **stream_utils**: Utility functions for generating and analyzing simulated streams.
 - **create_config_file**: Generates a stream configuration file from *galstreams* data.
 - **generator_keywords**: Default configuration keywords for use with `stream_generator`.
