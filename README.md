@@ -6,15 +6,30 @@ Note, this package is not intended to generate dynamic models or N-body simulati
 
 ## Installation
 
-Installation consists of git cloning `stream_sim`, adding the python module to your `PYTHONPATH`, and adding the `bin` directory to your `PATH`:
+Installation consists of three steps:
 
 ```bash
+# 1. Clone the repository
 git clone https://github.com/LSSTDESC/stream_sim.git
-export PYTHONPATH=${PWD}/stream_sim:${PYTHONPATH}
-export PATH=${PWD}/stream_sim/bin:${PATH}
+cd stream_sim
+
+# 2. Set environment variables
+export PYTHONPATH=${PWD}:${PYTHONPATH}
+export PATH=${PWD}/bin:${PATH}
+
+# 3. Download required data files
+python bin/download_data.py
 ```
 
-The code has some common dependencies (numpy, scipy, pandas, matplotlib) that should be present in your environment.
+The code requires common scientific Python packages:
+- numpy, scipy, pandas, matplotlib
+- astropy, healpy, gala
+- ugali (for stellar isochrones)
+
+For full setup (dependencies, optional tools, troubleshooting), see the
+[Installation Guide](https://lsstdesc.github.io/stream_sim/installation.html).  
+If data download fails or you want details on data structure, see the
+[Data page](https://lsstdesc.github.io/stream_sim/data.html).
 
 Eventually stream_sim will be installable through common package managers (i.e., pip and/or conda).
 
