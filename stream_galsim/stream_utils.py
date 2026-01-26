@@ -479,7 +479,7 @@ class StreamInterpolateTrackDensity:
         phi1_min = np.min(self.phi1) + delta_phi1
         phi1_max = np.max(self.phi1) - delta_phi1
         phi1_vals, phi2_vals, nstars_vals, width_vals = [], [], [], []
-
+        print("Compute density parameters")
         for phi1_t in np.arange(phi1_min, phi1_max, delta_phi1):
             # Select stars within a small window around current phi1 value
             mask = np.abs(self.phi1 - phi1_t) < delta_phi1
@@ -520,9 +520,25 @@ class StreamInterpolateTrackDensity:
                     # Fit did not converge
                     continue
         
-        ###fit track
-        lead_fit = np.polyfit(phi1_vals[phi1_vals>0], phi1_vals[phi2_vals>0], deg=3)
-        trail_fit = np.polyfit(phi1_vals[phi1_vals<0], phi1_vals[phi2_vals<0], deg=3)
+        ### fit track
+        print("Fit track")
+
+        phi1_vals = np.array(phi1_vals)
+        phi2_vals = np.array(phi2_vals)
+
+        mask_lead = phi1_vals > 0
+        mask_trail = phi1_vals < 0
+
+        if np.sum(mask_lead) > 5:
+            lead_fit = np.polyfit(phi1_vals[mask_lead], phi2_vals[mask_lead], deg=3)
+        else:
+            lead_fit = None
+
+        if np.sum(mask_trail) > 5:
+            trail_fit = np.polyfit(phi1_vals[mask_trail], phi2_vals[mask_trail], deg=3)
+        else:
+            trail_fit = None
+
         
 
         self.density_table = Table(

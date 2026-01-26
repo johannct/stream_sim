@@ -36,6 +36,6 @@ t_impact = 2.0 #* u.Gyr
 angle_impact = 0.12            # radians
 
 ##### Output options #####
-output_method = stars          # or density
+output_method = density          # or density
 output_coord = phi12                  # icrs, xyz, phi12, etc.
 

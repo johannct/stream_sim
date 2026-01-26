@@ -4,7 +4,6 @@
 ##### Load libraries #####
 
 #Utils
-from importlib import reload
 import argparse
 import pandas as pd
 import sys
@@ -29,9 +28,15 @@ with ac.galactocentric_frame_defaults.set("v4.0"):
     galcen_frame = ac.Galactocentric()
 
 #Define user path
-base_dir = os.path.abspath(os.path.join(os.getcwd()))
-sys.path.append(base_dir)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = os.path.abspath(os.path.join(script_dir, ".."))  # adapte le nombre de '..' si besoin
 
+# Ajoute au path
+if base_dir not in sys.path:
+    sys.path.insert(0, base_dir)
+
+
+sys.path.append(base_dir)
 #Custom scripts/functions
 import stream_galsim.stream_utils as sutils
 from stream_galsim.stream_utils import GeneratorInit as gen_init
@@ -83,7 +88,7 @@ if (perturbed == 'lead') | (perturbed == 'trail'):
                         impact_angle = halo_impact.at[0, 'angle_impact'], #Angle offset from progenitor at which the impact occurred
                         )
 elif perturbed == 'not':
-    print(merged_config['t_disrupt'])
+    # print(merged_config['t_disrupt'])
     s_lead, s_trail, s_perturbed = sutils.full_galpy_df(
                         sigv=progenitor.at[0, 'prog_sigv'], #Radial velocity dispersion of the progenitor
                         progenitor=prog_orbit, #Progenitor orbit instance
@@ -150,11 +155,23 @@ if output_method == 'stars':
     # Save stars table with sampled magnitudes
     sutils.save_star_data(stream_stars, mag_g_s, mag_r_s, 'phi12', filepath=f"{base_dir}/data/{merged_config['name_o']}_stars.csv")
 
-### To improve
-# elif output_method == 'density':
-#     print("Generating density map parameters...")
-#     stream_track_density = sutils.StreamInterpolateTrackDensity(s_stars_phi12[mask])
-#     density_table = stream_track_density.compute_density(delta_phi1=0.05, phi2_bins=15, plot=True, max_fev=1000000)
-#     density_table.write(f'{base_dir}/data/hall_2024_{name_o}_input.csv', format='csv', overwrite=True)
-#     print(f"density map parameters saved at {base_dir}/data/hall_2024_{name_o}_input.csv")
+elif output_method == 'density':
+    print("Interpolating track density")
+    streaminterpolatetrackdensity = sutils.StreamInterpolateTrackDensity(stream_stars)
+    density_table = streaminterpolatetrackdensity.compute_density()
+    print(density_table)
+    plt.plot(density_table['phi1'], density_table['phi2'], 'ko-', label='Average track')
+    plt.fill_between(density_table['phi1'],
+                    density_table['phi2'] - density_table['width'],
+                    density_table['phi2'] + density_table['width'],
+                    color='gray', alpha=0.3, label='± width')
+
+    plt.legend()
+    plt.xlabel("phi1")
+    plt.ylabel("phi2")
+    plt.title("2D density analysis of stream scatter plot")
+    plt.show()
+
+else:
+    print("Unrecognized output method. Use 'stars' or 'density'")
 
